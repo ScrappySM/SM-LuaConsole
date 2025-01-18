@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScrappySM/CarbonLauncher/refs/heads/main/schema.json",
+
+  "name": "SM-LuaConsole",
+  "url": "https://github.com/ScrappySM/SM-LuaConsole",
+
+  "authors": [
+    "ScrappySM"
+  ],
+
+  "description": "No description yet, needs to be filled in"
+}
