@@ -11,6 +11,7 @@ namespace Carbon::Offsets {
 		constexpr uintptr_t LuaManager = 0x1267620;
 		constexpr uintptr_t UpdateFunc = 0x343030;
 		constexpr uintptr_t LoadLuaEnvFunc = 0x54A7F0;
+		constexpr uintptr_t LogFunc = 0x5161A0;
 	} // namespace Raw
 
 	namespace Rebased {
@@ -18,5 +19,6 @@ namespace Carbon::Offsets {
 		REBASE_IMPL(LuaManager);
 		REBASE_IMPL(UpdateFunc);
 		REBASE_IMPL(LoadLuaEnvFunc);
+		REBASE_IMPL(LogFunc);
 	} // namespace Rebased
 } // namespace Carbon::Offsets

@@ -5,8 +5,8 @@
   "url": "https://github.com/ScrappySM/SM-LuaConsole",
 
   "authors": [
-    "ScrappySM"
+    "BenMcAvoy"
   ],
 
-  "description": "No description yet, needs to be filled in"
+  "description": "A console for executing Lua in Scrap Mechanic"
 }

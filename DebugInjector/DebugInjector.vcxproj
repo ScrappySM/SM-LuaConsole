@@ -24,6 +24,7 @@
     <ProjectGuid>{538a268f-a231-4286-87fc-b85175c45b54}</ProjectGuid>
     <RootNamespace>My1DebugInjector</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>DebugInjector</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

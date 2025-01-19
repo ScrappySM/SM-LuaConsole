@@ -9,36 +9,61 @@
 #include <vector>
 
 #include <kiero/kiero.h>
+#include <MinHook.h>
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 
 #include <carbon/tools.h>
+#include <carbon/lua/lua.hpp>
+
+#include <TextEditor.h>
+#include "font.h"
+
+using namespace Carbon::SM;
 
 typedef HRESULT(__stdcall* Present) (IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags);
 typedef HRESULT(__stdcall* ResizeBuffers) (IDXGISwapChain* pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 typedef LRESULT(CALLBACK* WNDPROC)(HWND, UINT, WPARAM, LPARAM);
 
-extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+// Log_t = void(__int64 UTILS::Console* thisPtr, const std::string& message, WORD colour, int type)
+typedef void(__fastcall* Log_t)(UTILS::Console*, const std::string&, UTILS::Colour, UTILS::LogType);
 
-using namespace Carbon::SM;
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace G {
 	Present oPresent;
 	ResizeBuffers oResizeBuffers;
 	WNDPROC oWndProc;
+	Log_t oLog = nullptr;
 
 	ID3D11Device* pDevice = NULL;
 	ID3D11DeviceContext* pContext = NULL;
-	ID3D11RenderTargetView* mainRenderTargetView;
+	ID3D11RenderTargetView* mainRenderTargetView = NULL;
 
 	bool presentReady = false;
 	bool showMenu = true;
 
-	GameStateType* gameStateType;
+	GameStateType* gameStateType = nullptr;
+	TextEditor editor = TextEditor();
+
+	std::vector<std::string> logMessages = {};
 } // namespace Globals
 
+static void LogWrapper(UTILS::Console* console, const std::string& message, UTILS::Colour colour, UTILS::LogType type) {
+	if (type != UTILS::LogType::Lua && message.find("SM-LuaConsole") == std::string::npos) {
+		return G::oLog(console, message, colour, type);
+	}
+
+	if (G::logMessages.size() > 1000)
+		G::logMessages.erase(G::logMessages.begin());
+
+	std::string msg = fmt::format("[Lua] {}", message);
+	G::logMessages.emplace_back(msg);
+
+	return G::oLog(console, message, colour, type);
+}
 
 static LRESULT WINAPI WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	if (uMsg == WM_SIZE || uMsg == WM_MOVE || uMsg == WM_ENTERSIZEMOVE || uMsg == WM_EXITSIZEMOVE || uMsg == WM_PAINT || uMsg == WM_NCPAINT || uMsg == WM_ERASEBKGND || uMsg == WM_NCCALCSIZE)
@@ -47,8 +72,13 @@ static LRESULT WINAPI WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM 
 	// If we're not in a world, only capture input if the mouse is on top of the menu
 	// Otherwise, capture input if the menu is open always (so we don't look around when trying to move the mouse to the menu)
 	bool captureInput = (*G::gameStateType == Play) ? G::showMenu : (G::showMenu && ImGui::GetIO().WantCaptureMouse);
-	if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam) || captureInput)
+	/*if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam) || captureInput)
+		return true;*/
+
+	if (captureInput) {
+		ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
 		return true;
+	}
 
 	return CallWindowProc(G::oWndProc, hWnd, uMsg, wParam, lParam);
 }
@@ -104,6 +134,31 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+
+		// Setup Dear ImGui style
+		ImGui::StyleColorsDark();
+
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.WindowRounding = 8.0f;
+		style.FrameRounding = 4.0f;
+		style.GrabRounding = 4.0f;
+		style.PopupRounding = 4.0f;
+		style.ScrollbarRounding = 4.0f;
+		style.TabRounding = 4.0f;
+		style.WindowBorderSize = 0.0f;
+		style.FrameBorderSize = 0.0f;
+		style.PopupBorderSize = 0.0f;
+		style.ChildBorderSize = 0.0f;
+		style.GrabMinSize = 8.0f;
+		style.GrabRounding = 4.0f;
+
+		// Load font (C:\Windows\Fonts\consola.ttf)
+		//io.Fonts->AddFontFromMemoryCompressedTTF(JetBrainsMonoNF_compressed_data, JetBrainsMonoNF_compressed_size, 16.0f);
+		ImFontConfig config;
+		config.FontDataOwnedByAtlas = false;
+		io.Fonts->AddFontFromMemoryCompressedTTF(JetBrainsMonoNF_compressed_data, JetBrainsMonoNF_compressed_size, 18.0f, &config);
+		io.Fonts->Build();
+
 		ImGui_ImplWin32_Init(sd.OutputWindow);
 		ImGui_ImplDX11_Init(G::pDevice, G::pContext);
 
@@ -116,7 +171,55 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		ImGui::ShowDemoWindow(&G::showMenu);
+		ImGui::Begin("SM-LuaConsole");
+
+		auto region = ImGui::GetContentRegionAvail();
+		region.y -= 64;
+		G::editor.Render("##Editor", region);
+
+		static bool removeAfterExecution = true;
+		if (ImGui::Button("Execute")) {
+			LuaExecutor::GetInstance()->OnUpdate([](lua_State* L) {
+				luaL_dostring(L, G::editor.GetText().c_str());
+				}, removeAfterExecution);
+		}
+		ImGui::SameLine();
+		ImGui::Checkbox("Remove after execution", &removeAfterExecution);
+		ImGui::SetItemTooltip("If checked, the function will only be called once");
+
+		static bool immediate = true;
+		if (ImGui::Button("Add to init")) {
+			LuaExecutor::GetInstance()->OnInitialize([](lua_State* L) {
+				luaL_dostring(L, G::editor.GetText().c_str());
+				}, immediate);
+		}
+
+		ImGui::SameLine();
+		ImGui::Checkbox("Immediate", &immediate);
+		ImGui::SetItemTooltip("If checked, the function will be called immediately if the game is already playing");
+
+		ImGui::End();
+
+		ImGui::Begin("Log");
+
+		// Colour and padding (make text pushed away from the border)
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(G::editor.GetPalette()[(int)TextEditor::PaletteIndex::Background]));
+
+		ImGui::BeginChild("LogInner", ImVec2(0, 0), false);
+		ImGui::Dummy(ImVec2(8, 8));
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.23f, 1.0f));
+		for (const auto& message : G::logMessages) {
+			ImGui::TextWrapped(message.c_str());
+		}
+		ImGui::PopStyleColor();
+
+		if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+			ImGui::SetScrollHereY(1.0f);
+		}
+		ImGui::EndChild();
+		ImGui::PopStyleColor();
+
+		ImGui::End();
 
 		if (*G::gameStateType == Play) {
 			ImDrawList* fg = ImGui::GetForegroundDrawList();
@@ -132,16 +235,36 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval
 	return G::oPresent(pSwapChain, SyncInterval, Flags);
 }
 
+void DllCleanup();
 DWORD WINAPI MainThread(LPVOID lpReserved) {
 	if (kiero::init(kiero::RenderType::D3D11) == kiero::Status::Success) {
 		kiero::bind(8, (void**)&G::oPresent, hkPresent);
 		kiero::bind(13, (void**)&G::oResizeBuffers, hkResizeBuffers);
 		INFO("[SM-LuaConsole] Successfully hooked D3D11 Present");
+
+		if (MH_CreateHook(reinterpret_cast<LPVOID>(Carbon::Offsets::Rebased::LogFunc), LogWrapper, reinterpret_cast<LPVOID*>(&G::oLog)) != MH_OK) {
+			ERROR("[SM-LuaConsole] Failed to hook Contraption::Console::Log\n");
+			return FALSE;
+		}
+
+		if (MH_EnableHook(reinterpret_cast<LPVOID>(Carbon::Offsets::Rebased::LogFunc)) != MH_OK) {
+			ERROR("[SM-LuaConsole] Failed to enable Contraption::Console::Log hook\n");
+			return FALSE;
+		}
+
+		INFO("[SM-LuaConsole] Successfully hooked Contraption::Console::Log");
 	}
 	else {
 		ERROR("[SM-LuaConsole] Failed to hook D3D11 Present\n");
 		return FALSE;
 	}
+
+	G::editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Lua());
+	G::editor.SetShowWhitespaces(false);
+	G::editor.SetPalette(TextEditor::GetDarkPalette());
+	G::editor.SetText(R"(-- This is a Lua script
+print("Hello, world!")
+)");
 
 	while (!GetAsyncKeyState(VK_NEXT)) {
 		if (GetAsyncKeyState(VK_INSERT) & 1) {
@@ -151,8 +274,34 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
+	INFO("[SM-LuaConsole] Attempting to cleanup, uninjecting");
+	DllCleanup();
 	FreeLibraryAndExitThread(static_cast<HMODULE>(lpReserved), 0);
 	return TRUE;
+}
+
+void DllCleanup() {
+	// Unhook
+	kiero::unbind(8);
+	kiero::unbind(13);
+
+	MH_DisableHook(reinterpret_cast<LPVOID>(Carbon::Offsets::Rebased::LogFunc));
+	MH_RemoveHook(reinterpret_cast<LPVOID>(Carbon::Offsets::Rebased::LogFunc));
+
+	static auto window = FindWindowA("CONTRAPTION_WINDOWS_CLASS", nullptr);
+	SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)G::oWndProc);
+
+	// Reset everything
+	if (G::mainRenderTargetView) G::mainRenderTargetView->Release();
+	if (G::pContext) G::pContext->Release();
+	if (G::pDevice) G::pDevice->Release();
+	if (G::presentReady) {
+		ImGui_ImplDX11_Shutdown();
+		ImGui_ImplWin32_Shutdown();
+		ImGui::DestroyContext();
+	}
+
+	kiero::shutdown();
 }
 
 BOOLEAN WINAPI DllMain(
@@ -180,24 +329,8 @@ BOOLEAN WINAPI DllMain(
 			CloseHandle(hMainThread);
 		}
 
-		// Unhook
-		kiero::unbind(8);
-		kiero::unbind(13);
+		DllCleanup();
 
-		static auto window = FindWindowA("CONTRAPTION_WINDOWS_CLASS", nullptr);
-		SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR)G::oWndProc);
-
-		// Reset everything
-		if (G::mainRenderTargetView) G::mainRenderTargetView->Release();
-		if (G::pContext) G::pContext->Release();
-		if (G::pDevice) G::pDevice->Release();
-		if (G::presentReady) {
-			ImGui_ImplDX11_Shutdown();
-			ImGui_ImplWin32_Shutdown();
-			ImGui::DestroyContext();
-		}
-
-		kiero::shutdown();
 		break;
 	}
 

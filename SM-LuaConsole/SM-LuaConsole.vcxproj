@@ -133,7 +133,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>include;vendor\CarbonLib\include;vendor\Kiero\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;vendor\CarbonLib\include;vendor\Kiero\include;vendor\ImColorTextEdit\include</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -151,7 +151,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>include;vendor\CarbonLib\include;vendor\Kiero\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;vendor\CarbonLib\include;vendor\Kiero\include;vendor\ImColorTextEdit\include</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -164,9 +164,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\dllmain.cpp" />
+    <ClCompile Include="vendor\ImColorTextEdit\src\TextEditor.cpp" />
     <ClCompile Include="vendor\Kiero\src\kiero.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\font.h" />
     <ClInclude Include="vendor\CarbonLib\include\carbon\console.h" />
     <ClInclude Include="vendor\CarbonLib\include\carbon\contraption.h" />
     <ClInclude Include="vendor\CarbonLib\include\carbon\lua\executor.h" />
@@ -176,6 +178,7 @@
     <ClInclude Include="vendor\CarbonLib\include\carbon\offsets.h" />
     <ClInclude Include="vendor\CarbonLib\include\carbon\tools.h" />
     <ClInclude Include="vendor\CarbonLib\include\carbon\utils.h" />
+    <ClInclude Include="vendor\ImColorTextEdit\include\TextEditor.h" />
     <ClInclude Include="vendor\Kiero\include\kiero\kiero.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
