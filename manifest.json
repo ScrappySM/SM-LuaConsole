@@ -8,5 +8,5 @@
     "BenMcAvoy"
   ],
 
-  "description": "A console for executing Lua in Scrap Mechanic"
+  "description": "A Lua Console for Scrap Mechanic, allows you to execute Lua once, on Lua env initialization and every tick."
 }
